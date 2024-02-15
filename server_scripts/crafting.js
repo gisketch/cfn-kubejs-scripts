@@ -16,10 +16,31 @@ ServerEvents.recipes((event) => {
     makeSpiritOrb("reliquary:withered_rib");
     makeSpiritOrb("reliquary:molten_core");
 
-    event.smelting("kubejs:copper_chowcoin", "minecraft:copper_ingot");
-    event.smelting("kubejs:iron_chowcoin", "minecraft:iron_ingot");
-    event.smelting("kubejs:gold_chowcoin", "minecraft:gold_ingot");
-    event.smelting("kubejs:diamond_chowcoin", "minecraft:diamond");
+    // event.smelting("kubejs:copper_chowcoin", "minecraft:copper_ingot");
+    // event.smelting("kubejs:iron_chowcoin", "minecraft:iron_ingot");
+    // event.smelting("kubejs:gold_chowcoin", "minecraft:gold_ingot");
+    // event.smelting("kubejs:diamond_chowcoin", "minecraft:diamond");
+
+    event.shaped(Item.of("kubejs:iron_chowcoin", 1),
+        ["AAA", "A A", "AAA"],
+        {
+            A: "kubejs:copper_chowcoin"
+        }
+    );
+
+    event.shaped(Item.of("kubejs:gold_chowcoin", 1),
+        ["AAA", "A A", "AAA"],
+        {
+            A: "kubejs:iron_chowcoin"
+        }
+    );
+
+    event.shaped(Item.of("kubejs:diamond_chowcoin", 1),
+        ["AAA", "A A", "AAA"],
+        {
+            A: "kubejs:gold_chowcoin"
+        }
+    );
 
     event.shapeless(Item.of("kubejs:iron_chowcoin", 1), [
         "8x kubejs:copper_chowcoin",
@@ -38,7 +59,7 @@ ServerEvents.recipes((event) => {
 
     event.shaped(
         Item.of("magic_mirror_mod:magic_mirror", 1),
-        ["CAC", "ABA", "AAA"],
+        ["AAA", "CBC", "AAA"],
         {
             A: "minecraft:diamond",
             B: "endermanoverhaul:soul_pearl",
@@ -49,16 +70,3 @@ ServerEvents.recipes((event) => {
     console.log("Hello! The recipe event has fired!");
 });
 
-EntityEvents.death("player", (event) => {
-    const { player } = event;
-    player.block.popItem(Item.playerHead(player.username));
-});
-
-PlayerEvents.chat((event) => {
-    console.log(event.message);
-    if (event.message.trim().toLowerCase() == "creeper") {
-        event.server.scheduleInTicks(1, event.server, (ctx) => {
-            ctx.data.tell(Text.green("Aww man"));
-        });
-    }
-});
