@@ -3,9 +3,6 @@ function log(event, string) {
   console.log(string);
 }
 
-//TODO: REWARD RANDOM
-//TODO: DELAY
-
 function generateReward(finished) {
   if (finished >= 60) {
     return "kubejs:diamond_chowcoin";
@@ -17,16 +14,18 @@ function generateReward(finished) {
   return "kubejs:copper_chowcoin";
 }
 
-const multiplier = 1.5;
 function generateAmount(finished) {
+  let baseAmount;
   if (finished >= 60) {
-    return (4 - 90 + finished * multiplier).toFixed(0);
+    baseAmount = 4 - 90 + finished * multiplier;
   } else if (finished >= 40) {
-    return (4 - 60 + finished * multiplier).toFixed(0);
+    baseAmount = 4 - 60 + finished * multiplier;
   } else if (finished >= 20) {
-    return (4 - 30 + finished * multiplier).toFixed(0);
+    baseAmount = 4 - 30 + finished * multiplier;
+  } else {
+    baseAmount = 4 + finished * multiplier;
   }
-  return (4 + finished * multiplier).toFixed(0);
+  return baseAmount.toFixed(0);
 }
 
 function isIncluded(string, array) {
@@ -66,12 +65,9 @@ function finishBounty(event) {
   sPData.bounty.rewardAmount = generateAmount(sPData.bounty.finished);
   sPData.bounty.reward = generateReward(sPData.bounty.finished);
 
-  sPData.bounty.timer = sPData.bounty.timeToChange * 2;
-  log(event, "Timer: " + sPData.bounty.timer);
+  sPData.bounty.timer = timeToChange * 2;
 
-  event.server.runCommandSilent(
-    `/effect clear ${sPData.bounty.target} minecraft:glowing`,
-  );
+  removeGlow(event);
 
   let blacklist = sPData.bounty.blacklist;
 
@@ -91,7 +87,7 @@ function finishBounty(event) {
 }
 
 function stringifyItem(item) {
-  return Item.of(item).displayName.getString().slice(1, -1);
+  return rewards[item];
 }
 
 function sendGlobalMessage(event, title, subtitle) {
@@ -105,24 +101,14 @@ function sendGlobalMessage(event, title, subtitle) {
   );
 }
 
-const dimensionMap = {
-  "minecraft:overworld": "Overworld",
-  "minecraft:the_nether": "Nether",
-  "minecraft:the_end": "End",
-  "aether:the_aether": "Aether",
-  "voidscape:void": "Void",
-};
-
-const minPlayers = 2; //TODO: CHANGE TO 4
-
-function checkBountyAvailability(event) {
-  let sPData = event.server.persistentData;
-  sPData.bounty.enabled =
-    sPData.bounty.enabled ?? event.server.players.length >= minPlayers;
-}
+// function checkBountyAvailability(event) {
+//   let sPData = event.server.persistentData;
+//   sPData.bounty.enabled =
+//     sPData.bounty.enabled ?? event.server.players.length >= minPlayers;
+// }
 
 PlayerEvents.loggedIn((event) => {
-  checkBountyAvailability(event);
+  // checkBountyAvailability(event);
   let sPData = event.server.persistentData;
   sPData.bounty.stats[event.player.username] = {
     death: 0,
@@ -132,21 +118,19 @@ PlayerEvents.loggedIn((event) => {
 
   sPData.optOutStatuses[event.player.username] =
     sPData.optOutStatuses[event.player.username] ?? false;
+
+  checkGlow(event);
 });
 
 PlayerEvents.loggedOut((event) => {
-  checkBountyAvailability(event);
+  // checkBountyAvailability(event);
+  checkGlow(event);
 });
-
-// Initialize or retrieve persistent opt-out status storage
-function initializeOptOutStatus(sPData) {
-  if (!sPData.optOutStatuses) {
-    sPData.optOutStatuses = {};
-  }
-}
 
 ServerEvents.loaded((event) => {
   let sPData = event.server.persistentData;
+  sPData.bounty.rewardAmount = generateAmount(sPData.bounty.finished);
+  sPData.bounty.reward = generateReward(sPData.bounty.finished);
   initializeOptOutStatus(sPData);
 });
 
@@ -184,39 +168,98 @@ function eligibleForBounty(playerUsername, sPData) {
   return !sPData.optOutStatuses[playerUsername];
 }
 
+function giveGlow(event) {
+  let bounty = event.server.persistentData.bounty;
+  event.server.runCommandSilent(
+    `/effect give ${bounty.target} minecraft:glowing infinite`,
+  );
+}
+
+function removeGlow(event) {
+  let bounty = event.server.persistentData.bounty;
+  event.server.runCommandSilent(
+    `/effect clear ${bounty.target} minecraft:glowing`,
+  );
+}
+
+function checkGlow(event) {
+  if (event.server.persistentData.bounty.target == event.player.username) {
+    giveGlow(event);
+  } else {
+    removeGlow(event);
+  }
+}
+
+const timeToChange = 20 * 60 * 60; // 20 ticks * 60 seconds * 60 minutes
+const bountyAnnouncementDelay = 20 * 60 * 5; // 5 minutes
+const minPlayers = 4;
+const multiplier = 1.5;
+const dimensionMap = {
+  "minecraft:overworld": "Overworld",
+  "minecraft:the_nether": "Nether",
+  "minecraft:the_end": "End",
+  "aether:the_aether": "Aether",
+  "voidscape:void": "Void",
+};
+
+function canBounty(event) {
+  let sPData = event.server.persistentData;
+  return event.server.players.length >= minPlayers && !sPData.bounty.forceStop;
+}
+
+function clearData(event) {
+  event.server.persistentData.remove("bounty");
+  event.server.persistentData.remove("optOutStatuses");
+}
+
+const rewards = {
+  "kubejs:copper_chowcoin": "Copper Chowcoin",
+  "kubejs:iron_chowcoin": "Iron Chowcoin",
+  "kubejs:gold_chowcoin": "Gold Chowcoin",
+  "kubejs:diamond_chowcoin": "Diamond Chowcoin",
+};
+
 ServerEvents.tick((event) => {
   let sPData = event.server.persistentData;
 
+  sPData.optOutStatuses = sPData.optOutStatuses ?? {};
   sPData.bounty = sPData.bounty ?? {};
 
   let bounty = sPData.bounty;
 
-  bounty.override = bounty.override ?? true;
-
-  bounty.timeToChange = 20 * 30; // 20 ticks * X seconds * X minutes //TODO: change to 1 hour
-
-  bounty.enabled = bounty.enabled ?? event.server.players.length >= minPlayers;
-
-  bounty.stats = bounty.stats ?? {};
-
-  bounty.reward = bounty.reward ?? generateReward(bounty.finished);
-  bounty.rewardAmount = bounty.rewardAmount ?? generateAmount(bounty.finished);
-  bounty.timer = bounty.timer ?? 0;
-
-  bounty.blacklist = bounty.blacklist ?? [];
-
-  bounty.target = bounty.target ?? null;
-  bounty.lastSeen = bounty.lastSeen ?? "";
+  bounty.forceStop = bounty.forceStop ?? true;
 
   bounty.finished = bounty.finished ?? 0;
-  bounty.timer--;
 
   bounty.stats = bounty.stats ?? {};
+  bounty.reward = bounty.reward ?? "kubejs:copper_chowcoin";
 
+  if (!bounty.rewardAmount) {
+    bounty.rewardAmount = 4;
+  }
+  //
+  // bounty.rewardAmount = bounty.rewardAmount ?? 4;
+
+  bounty.timer = bounty.timer ?? 0;
+  bounty.blacklist = bounty.blacklist ?? [];
+  bounty.target = bounty.target ?? null;
+  bounty.lastSeen = bounty.lastSeen ?? "";
+  bounty.stats = bounty.stats ?? {};
   bounty.hasAnnouncedDelay = bounty.hasAnnouncedDelay ?? false;
 
-  if (bounty.timer == (20 * 30) && !bounty.hasAnnouncedDelay) {
-    //TODO: change to 5 minutes
+  if (bounty.timer > 0) {
+    bounty.timer--;
+  }
+
+  if (!canBounty(event)) {
+    return;
+  }
+
+  if (
+    bounty.timer == bountyAnnouncementDelay &&
+    !bounty.hasAnnouncedDelay &&
+    bounty.target == null
+  ) {
     bounty.hasAnnouncedDelay = true;
 
     let eligiblePlayers = event.server.players.filter((player) =>
@@ -234,10 +277,6 @@ ServerEvents.tick((event) => {
 
   if (bounty.timer <= 0) {
     bounty.timer = 0;
-
-    if (bounty.override) {
-      return;
-    }
 
     if (bounty.target !== null) {
       // IF SURVIVED
@@ -261,10 +300,17 @@ ServerEvents.tick((event) => {
           `${bounty.target} survived! Rewarded with ${survivorReward}x ${stringifyItem(bounty.reward)}`,
         );
 
-        playerSurvived.block.popItem(
-          Item.of(bounty.reward).withCount(bounty.rewardAmount * 1.3),
-        );
-        playerSurvived = null;
+        playerSurvived.tell("");
+        playerSurvived.tell("Your reward will be dropped in 5 seconds.");
+
+        event.server.scheduleInTicks(20 * 5, () => {
+          playerSurvived.tell("§aYour reward has been dropped.");
+          playerSurvived.block.popItem(
+            Item.of(bounty.reward).withCount(bounty.rewardAmount * 1.3),
+          );
+          playerSurvived.addXPLevels(5);
+          playerSurvived = null;
+        });
       }
       finishBounty(event);
       return;
@@ -296,9 +342,7 @@ ServerEvents.tick((event) => {
       }
 
       bounty.target = targetPlayer.username;
-      event.server.runCommandSilent(
-        `/effect give ${bounty.target} minecraft:glowing infinite`,
-      );
+      giveGlow(event);
 
       // ANNOUNCE MESSAGE
       let hasSent = false;
@@ -339,25 +383,24 @@ ServerEvents.tick((event) => {
       }
 
       // SET TIMER
-      bounty.timer = bounty.timeToChange;
+      bounty.timer = timeToChange;
     }
   }
 
-  if (bounty.timer % (20 * 10) === 0 && !bounty.override) {
-    // every 10 s
+  if (bounty.timer % announcementInterval === 0 && !bounty.forceStop) {
     if (bounty.target !== null) {
       event.server.tell(
-        `${bounty.timer / 20} seconds left to kill ${bounty.target}`, //TODO: Change to minutes
+        `${bounty.timer / (20 * 60)} minutes left to kill ${bounty.target}`, //TODO: Change to minutes
       );
     }
   }
 });
 
+const announcementInterval = 20 * 60 * 20; // 20 minutes
+
 PlayerEvents.respawned((event) => {
   if (event.server.persistentData.bounty.target === event.player.username) {
-    event.server.runCommandSilent(
-      `/effect give ${event.player.username} minecraft:glowing infinite`,
-    );
+    giveGlow(event);
   }
 });
 
@@ -425,10 +468,12 @@ EntityEvents.death((event) => {
       let playerHead = Item.playerHead(victim.username);
 
       suspect.tell("Your reward will be dropped in 5 seconds.");
+
       event.server.scheduleInTicks(20 * 5, () => {
         suspect.tell("§aYour reward has been dropped.");
         suspect.block.popItem(playerHead);
         suspect.block.popItem(Item.of(bounty.reward, bounty.rewardAmount));
+        suspect.addXPLevels(5);
       });
 
       if (!bounty.stats[suspect.username]) {
@@ -451,8 +496,7 @@ EntityEvents.death((event) => {
   }
 });
 
-BlockEvents.rightClicked("minecraft:crafting_table", (event) => {
-  //TODO: change to waystone
+BlockEvents.rightClicked("waystones:waystone", (event) => {
   let player = event.player.username;
   let target = event.server.persistentData.bounty.target;
   if (target === player) {
@@ -469,7 +513,7 @@ PlayerEvents.chat((event) => {
     event.player.tell("");
     event.player.tell("§e!bounty §f- Shows the current bounty details.");
     event.player.tell("§e!stats §f- Shows your bounty stats.");
-    event.player.tell("§e!lb §f- Shows the leaderboard.");
+    event.player.tell("§e!lb §f- Shows the leaderboard. Add d, k, or s to sort.");
     event.player.tell(
       "§e!join §f- Opt in to the bounty system. On by default.",
     );
@@ -493,35 +537,47 @@ PlayerEvents.chat((event) => {
       event.player.tell("");
       event.player.tell("§eTarget: §f" + targetName);
       event.player.tell("§eLast seen: §f" + lastSeen);
-      event.player.tell("§eTime left: §f" + bounty.timer / 20 + "s"); //TODO: to minutes
-    } else if (bounty.override) {
-      event.player.tell("§cBounty is disabled.");
-    } else {
-      // Inform the player that there is no active bounty
       event.player.tell(
-        `§cThere is currently no active bounty. Next bounty in ${bounty.timer / 20} seconds.`, //TODO: to minutes
+        "§eTime left: §f" + (bounty.timer / (20 * 60)).toFixed(0) + " minutes",
+      );
+    } else if (!canBounty(event)) {
+      event.player.tell(
+        "§cBounty is disabled. There is not enough players or bounty has been forcefully stopped.",
+      );
+    } else {
+      event.player.tell(
+        `§cThere is currently no active bounty. Next bounty in ${(bounty.timer / (20 * 60)).toFixed(0)} minutes.`,
       );
     }
     event.player.tell("");
+
     let eligiblePlayers = event.server.players.filter((player) => {
       return eligibleForBounty(player.username, sPData);
     });
+
     event.player.tell(
-      `§fCurrent Players: ${eligiblePlayers.map((player) => player.username).join(", ")}`,
+      `§fParticipants: ${eligiblePlayers.map((player) => player.username).join(", ")}`,
     );
     event.cancel();
   }
 
-  if (event.message.trim().toLowerCase() == "!bounty override") {
-    sPData.bounty.override = !sPData.bounty.override;
+  if (event.message.trim().toLowerCase() == "!bounty toggle") {
+    sPData.bounty.forceStop = !sPData.bounty.forceStop;
+    if (!sPData.bounty.forceStop) {
+      event.player.tell("§fBounty is now enabled.");
+    } else {
+      event.player.tell("§cBounty is now disabled.");
+    }
     event.cancel();
   }
 
   if (event.message.trim().toLowerCase() == "!bounty data") {
     Object.entries(sPData.bounty).forEach((entry) => {
       const [key, value] = entry;
-      event.player.tell(`${key}: ${value}`);
+      event.player.tell(`§l§a${key}: §f${value}`);
     });
+
+    event.player.tell(`§l§aOpted out: §f${sPData.optOutStatuses}`);
     event.cancel();
   }
 
@@ -586,12 +642,6 @@ PlayerEvents.chat((event) => {
     event.cancel();
   }
 
-  if (event.message.trim().toLowerCase() == "!lb") {
-    let sPData = event.server.persistentData;
-    displayLeaderboard(event, sPData.bounty.stats);
-    event.cancel();
-  }
-
   let message = event.message.trim().toLowerCase();
 
   switch (message) {
@@ -607,11 +657,37 @@ PlayerEvents.chat((event) => {
       initializeOptOutStatus(sPData);
       event.cancel();
       break;
+    case "!delete":
+      clearData(event);
+      event.cancel();
+      break;
     case "creeper":
       event.server.scheduleInTicks(5, (ctx) => {
         event.server.tell("Aww man!");
       });
       break;
+  }
+
+  if (message.startsWith("!timer ")) {
+    let args = message.split(" ");
+    if (args.length == 2) {
+      let timerValue = parseInt(args[1], 10);
+      if (!isNaN(timerValue)) {
+        event.player.tell(`changed TIMER to ${timerValue}`);
+        sPData.bounty.timer = timerValue * 20 * 60 + 20;
+        event.cancel();
+      } else {
+        event.player.tell("Invalid timer value. Please specify a number."); // Inform the user of incorrect input
+      }
+    }
+  }
+
+  const args = event.message.trim().toLowerCase().split(" ");
+  if (args[0] === "!lb") {
+    let sPData = event.server.persistentData;
+    let sortCriteria = args[1]; // Could be 'd' for deaths, 'k' for kills, or 's' for survived times
+    displayLeaderboard(event, sPData.bounty.stats, sortCriteria);
+    event.cancel();
   }
 });
 
@@ -647,16 +723,36 @@ function calculateKD(stats) {
   return kdList;
 }
 
-function displayLeaderboard(event, stats) {
-  const kdList = calculateKD(stats);
+function displayLeaderboard(event, stats, sortCriteria) {
+  let kdList = calculateKD(stats);
+  let sortedBy;
 
+  // Apply sorting based on the criteria
+  switch (sortCriteria) {
+    case "d": // Sort by deaths
+      kdList.sort((a, b) => a.deaths - b.deaths);
+      sortedBy = "deaths";
+      break;
+    case "k": // Sort by kills
+      kdList.sort((a, b) => b.totalKills - a.totalKills);
+      sortedBy = "kills";
+      break;
+    case "s": // Sort by survived times
+      kdList.sort((a, b) => b.survived - a.survived);
+      sortedBy = "survival";
+      break;
+    default: // Default to sorting by K/D ratio
+          sortedBy = "K/D"
+      kdList.sort((a, b) => b.kdRatio - a.kdRatio);
+  }
+
+  // Display the leaderboard
   event.server.tell(" ");
-  event.server.tell("§lChowkingdom Bounty Leaderboard"); // Gold color with bold formatting for title
+  event.server.tell("§lLeaderboard - " + sortedBy);
   event.server.tell(" ");
 
   kdList.forEach((entry, index) => {
     let colorCode;
-    // Assign color codes based on the player's position
     if (index === 0) {
       colorCode = "§6"; // Gold for first place
     } else if (index === 1) {
