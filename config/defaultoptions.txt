@@ -1,0 +1,10 @@
+key_key.corpse.death_history:key.keyboard.unknown
+key_quark.keybind.lock_rotation:key.keyboard.unknown
+key_iris.keybind.reload:key.keyboard.unknown
+key_iris.keybind.toggleShaders:key.keyboard.unknown
+key_iris.keybind.shaderPackSelection:key.keyboard.unknown
+key_key.curios.open.desc:key.keyboard.unknown
+key_gui.xaero_minimap_settings:key.keyboard.unknown
+key_gui.xaero_new_waypoint:key.keyboard.unknown
+key_gui.xaero_waypoints_key:key.keyboard.unknown
+key_tetra.toolbelt.binding.access:key.mouse.4
